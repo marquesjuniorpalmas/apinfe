@@ -156,6 +156,8 @@ abstract class DocumentosFiscaisAbstract implements DocumentosFiscaisInterface
             $std = new Standardize();
             $stdClass = $std->toStd($response);
 
+            print_r($stdClass);
+
             // Verificar se a resposta foi bem-sucedida
             if (!isset($stdClass->cStat)) {
                 throw new Exception('Resposta inválida da SEFAZ ao enviar lote', 9006);
