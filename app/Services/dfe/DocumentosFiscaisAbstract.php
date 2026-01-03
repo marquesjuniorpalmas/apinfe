@@ -148,28 +148,59 @@ abstract class DocumentosFiscaisAbstract implements DocumentosFiscaisInterface
 
     public function sendBatch(Documento $documento)
     {
-        $idBatch = str_pad('100', 15, '0', STR_PAD_LEFT);
+        try {
+            $idBatch = str_pad('100', 15, '0', STR_PAD_LEFT);
 
-        $response = $this->tools->sefazEnviaLote([base64_decode($documento->conteudo_xml_assinado)], $idBatch);
+            $response = $this->tools->sefazEnviaLote([base64_decode($documento->conteudo_xml_assinado)], $idBatch);
 
-        $std = new Standardize();
-        $stdClass = $std->toStd($response);
+            $std = new Standardize();
+            $stdClass = $std->toStd($response);
 
-        $eventoData = [
-            'nome_evento' => 'envio_lote',
-            'codigo' => $stdClass->cStat,
-            'mensagem_retorno' => $stdClass->xMotivo,
-            'data_hora_evento' => Carbon::parse($stdClass->dhRecbto),
-            //'data_hora_evento' => Carbon::createFromFormat('c', $stdClass->dhRecbto),
-            'recibo' => $stdClass->infRec->nRec,
-        ];
+            // Verificar se a resposta foi bem-sucedida
+            if (!isset($stdClass->cStat)) {
+                throw new Exception('Resposta inválida da SEFAZ ao enviar lote', 9006);
+            }
 
-        if($stdClass->cStat == 103 || $stdClass->cStat == 104 || $stdClass->cStat == 105 ){
-            $evento = $documento->eventos()->create($eventoData);
-        } else {
-            $evento = json_decode(json_encode($eventoData));
+            // Preparar dados do evento
+            $eventoData = [
+                'nome_evento' => 'envio_lote',
+                'codigo' => $stdClass->cStat,
+                'mensagem_retorno' => $stdClass->xMotivo ?? 'Sem mensagem',
+                'data_hora_evento' => isset($stdClass->dhRecbto) ? Carbon::parse($stdClass->dhRecbto) : now(),
+                'recibo' => null, // Será preenchido se existir
+            ];
+
+            // Verificar se há recibo (infRec só existe em respostas de sucesso)
+            if (isset($stdClass->infRec) && isset($stdClass->infRec->nRec)) {
+                $eventoData['recibo'] = $stdClass->infRec->nRec;
+            }
+
+            // Verificar se o lote foi aceito (cStat 103, 104 ou 105)
+            if ($stdClass->cStat == 103 || $stdClass->cStat == 104 || $stdClass->cStat == 105) {
+                $evento = $documento->eventos()->create($eventoData);
+            } else {
+                // Lote rejeitado ou com erro
+                $evento = json_decode(json_encode($eventoData));
+                
+                // Log do erro para debug
+                \Log::warning('Lote rejeitado pela SEFAZ', [
+                    'codigo' => $stdClass->cStat,
+                    'mensagem' => $stdClass->xMotivo ?? 'Sem mensagem',
+                    'documento_id' => $documento->id,
+                ]);
+            }
+            
+            return $evento;
+            
+        } catch (Exception $e) {
+            \Log::error('Erro ao enviar lote para SEFAZ', [
+                'message' => $e->getMessage(),
+                'documento_id' => $documento->id ?? null,
+                'trace' => $e->getTraceAsString(),
+            ]);
+            
+            throw new Exception('Erro ao enviar lote para SEFAZ: ' . $e->getMessage(), $e->getCode() ?: 9007);
         }
-        return $evento;
     }
 
 
