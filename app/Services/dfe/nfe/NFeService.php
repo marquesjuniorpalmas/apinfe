@@ -645,28 +645,58 @@ class NFeService extends DocumentosFiscaisAbstract
             return $data;
 
         } catch (Exception $e) {
-            $erros = $nfeService->getErrors();
+            // Log do erro para debug
+            \Log::error('Erro ao processar NFe', [
+                'message' => $e->getMessage(),
+                'code' => $e->getCode(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
 
+            // Tentar obter erros do NFe se o objeto foi inicializado
+            $erros = null;
+            if (isset($nfeService) && $nfeService && method_exists($nfeService, 'getErrors')) {
+                try {
+                    $erros = $nfeService->getErrors();
+                } catch (Exception $errorException) {
+                    \Log::warning('Erro ao obter erros do NFe', [
+                        'message' => $errorException->getMessage()
+                    ]);
+                }
+            }
+
+            // Preparar resposta de erro
             $return_erros = [
                 'sucesso' => false,
                 'codigo' => 9999,
                 'mensagem' => 'O XML contém erros de preenchimento.',
                 'correcao' => 'Consulte o manual de integração para o correto preenchimento do JSON.',
-                'data' => $erros,
+                'data' => $erros ?: [],
+                'erro_excecao' => config('app.debug') ? [
+                    'mensagem' => $e->getMessage(),
+                    'codigo' => $e->getCode(),
+                    'arquivo' => $e->getFile(),
+                    'linha' => $e->getLine(),
+                ] : null,
             ];
 
-            if(!is_null($erros)) {
+            // Se houver erros específicos do NFe, retornar eles
+            if (!empty($erros) && is_array($erros)) {
                 return response()->json($return_erros);
             } else {
-                return [
+                // Caso contrário, retornar erro genérico com informações da exceção
+                return response()->json([
                     'sucesso' => false,
-                    'codigo' => $e->getCode(),
-                    'mensagem' => 'Houve uma falha ao montar o XML',
-                    'data' => null
-                ];
+                    'codigo' => $e->getCode() ?: 9999,
+                    'mensagem' => 'Houve uma falha ao montar o XML: ' . $e->getMessage(),
+                    'data' => config('app.debug') ? [
+                        'erro' => $e->getMessage(),
+                        'arquivo' => $e->getFile(),
+                        'linha' => $e->getLine(),
+                    ] : null
+                ]);
             }
-
-
         }
 
     }
