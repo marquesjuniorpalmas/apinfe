@@ -455,16 +455,41 @@ class NFeService extends DocumentosFiscaisAbstract
                 'data' => $xml
             ];
         } catch (Exception $e) {
+            // Log do erro para debug
+            \Log::error('Erro ao montar XML da NFe', [
+                'message' => $e->getMessage(),
+                'code' => $e->getCode(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            // Tentar obter erros específicos do NFe
+            $erros = null;
+            if ($this->nfe && method_exists($this->nfe, 'getErrors')) {
+                try {
+                    $erros = $this->nfe->getErrors();
+                } catch (Exception $errorException) {
+                    \Log::warning('Erro ao obter erros do NFe', [
+                        'message' => $errorException->getMessage()
+                    ]);
+                }
+            }
+
             return [
                 'sucesso' => false,
                 'chave' => '',
                 'numero' => $request->input("numero"),
                 'serie' => $request->input("serie"),
-                'data' => ''
+                'data' => '',
+                'erro' => $e->getMessage(),
+                'codigo_erro' => $e->getCode() ?: 9999,
+                'erros_validacao' => $erros ?: [],
+                'debug' => config('app.debug') ? [
+                    'arquivo' => $e->getFile(),
+                    'linha' => $e->getLine(),
+                ] : null
             ];
-
-
-
         }
 
     }
