@@ -619,6 +619,7 @@ class NFeService extends DocumentosFiscaisAbstract
             }
 
             $evento = $nfeService->sendBatch($documento);
+            print_r($evento);
 
             // Se o evento não for uma instância de Evento, significa que houve erro
             if (get_class($evento) !== Evento::class) {
