@@ -520,7 +520,15 @@ class NFeService extends DocumentosFiscaisAbstract
             return $documento;
 
         } catch (Exception $e) {
-
+            \Log::error('Erro ao gerar DANFE', [
+                'message' => $e->getMessage(),
+                'code' => $e->getCode(),
+                'documento_id' => $documento->id ?? null,
+                'trace' => $e->getTraceAsString(),
+            ]);
+            
+            // Retornar o documento mesmo com erro no PDF (não crítico)
+            return $documento;
         }
 
     }
@@ -578,7 +586,15 @@ class NFeService extends DocumentosFiscaisAbstract
             return base64_encode($pdf);
 
         } catch (Exception $e) {
-
+            \Log::error('Erro ao gerar DANFE de Carta de Correção', [
+                'message' => $e->getMessage(),
+                'code' => $e->getCode(),
+                'documento_id' => $documento->id ?? null,
+                'trace' => $e->getTraceAsString(),
+            ]);
+            
+            // Retornar null ou lançar exceção dependendo do caso
+            throw new Exception('Erro ao gerar DANFE de Carta de Correção: ' . $e->getMessage(), $e->getCode() ?: 9013);
         }
 
     }
