@@ -603,7 +603,20 @@ class NFeService extends DocumentosFiscaisAbstract
 
             $documento = $nfeService->assignXml($result);
 
-            file_put_contents('xml.xml', base64_decode($documento->getAttributeValue('conteudo_xml_assinado')));
+            // Salvar XML para debug (opcional - apenas se necessário)
+            // Movido para storage para evitar problemas de permissão
+            if (config('app.debug')) {
+                try {
+                    $xmlContent = base64_decode($documento->getAttributeValue('conteudo_xml_assinado'));
+                    $filename = 'nfe_' . $documento->chave . '_' . date('YmdHis') . '.xml';
+                    \Storage::disk('local')->put('xml/' . $filename, $xmlContent);
+                } catch (\Exception $debugException) {
+                    // Ignorar erro de debug - não é crítico
+                    \Log::warning('Não foi possível salvar XML para debug', [
+                        'message' => $debugException->getMessage()
+                    ]);
+                }
+            }
 
             $evento = $nfeService->sendBatch($documento);
 
