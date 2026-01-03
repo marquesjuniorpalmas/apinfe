@@ -19,6 +19,20 @@ class NFeController extends Controller
         try {
             $emitente = auth()->user()->emitente;
 
+            if (!$emitente) {
+                return $this->error([
+                    'error_message' => 'Emitente não encontrado para o usuário autenticado',
+                ], 404);
+            }
+
+            // Verificar se o emitente tem certificado
+            if (empty($emitente->conteudo_certificado) && empty($emitente->caminho_certificado)) {
+                return $this->error([
+                    'error_message' => 'Certificado digital não configurado para o emitente',
+                    'sugestao' => 'Configure o certificado digital através do endpoint PUT /api/emitente/certificado',
+                ], 400);
+            }
+
             $nfeService = new NFeService($emitente, '55');
 
             $data = $nfeService->sendAndAuthorizeNfe($request);
@@ -26,14 +40,16 @@ class NFeController extends Controller
             return response()->json($data);
 
         } catch (Exception $e) {
+            \Log::error('Erro ao gerar NFe', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'user_id' => auth()->id(),
+            ]);
 
-
-//            return [
-//                'sucesso' => false,
-//                'codigo' => $e->getCode(),
-//                'mensagem' => 'Vai se fuder',
-//                'data' => null
-//            ];
+            return $this->error([
+                'error_message' => 'Erro na transmissão: ' . $e->getMessage(),
+                'codigo' => $e->getCode() ?: 500,
+            ], 500);
         }
 
     }

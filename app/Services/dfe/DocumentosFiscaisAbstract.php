@@ -74,22 +74,48 @@ abstract class DocumentosFiscaisAbstract implements DocumentosFiscaisInterface
 
             $this->configJson = json_encode($config);
 
-            $this->tools = new Tools($this->configJson, Certificate::readPfx(base64_decode($this->emitente->conteudo_certificado), decrypt($this->emitente->senha_certificado)));
-            $this->nfe = new Make();
+            // Verificar se o certificado existe
+            if (empty($this->emitente->conteudo_certificado) && empty($this->emitente->caminho_certificado)) {
+                throw new Exception('Certificado digital não configurado para o emitente', 9001);
+            }
 
-            return [
-                'sucesso' => true,
-                'codigo' => 1001,
-                'mensagem' => 'Processamento Ok'
-            ];
+            // Tentar ler o certificado
+            try {
+                $certificadoConteudo = !empty($this->emitente->conteudo_certificado) 
+                    ? base64_decode($this->emitente->conteudo_certificado) 
+                    : file_get_contents($this->emitente->caminho_certificado);
+                
+                $senhaCertificado = decrypt($this->emitente->senha_certificado);
+                
+                $certificate = Certificate::readPfx($certificadoConteudo, $senhaCertificado);
+            } catch (Exception $certError) {
+                throw new Exception('Erro ao ler o certificado digital: ' . $certError->getMessage() . '. Verifique se o certificado e a senha estão corretos.', 9002);
+            }
 
+            // Inicializar Tools e Make
+            try {
+                $this->tools = new Tools($this->configJson, $certificate);
+                $this->nfe = new Make();
+            } catch (Exception $initError) {
+                throw new Exception('Erro ao inicializar ferramentas de NFe: ' . $initError->getMessage(), 9003);
+            }
+
+            // Verificar se a inicialização foi bem-sucedida
+            if (!$this->nfe) {
+                throw new Exception('Falha ao inicializar o objeto Make para geração da NFe', 9004);
+            }
+
+            if (!$this->tools) {
+                throw new Exception('Falha ao inicializar o objeto Tools para comunicação com a SEFAZ', 9005);
+            }
 
         } catch (Exception $e) {
-            return [
-                'sucesso' => false,
-                'codigo' => $e->getCode(),
-                'mensagem' => $e->getMessage()
-            ];
+            // Limpar propriedades em caso de erro
+            $this->nfe = null;
+            $this->tools = null;
+            
+            // Lançar exceção para que o erro seja tratado adequadamente
+            throw new Exception('Erro ao inicializar serviço de NFe: ' . $e->getMessage(), $e->getCode() ?: 9000);
         }
     }
 

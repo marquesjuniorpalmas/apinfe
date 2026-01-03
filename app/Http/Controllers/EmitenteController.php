@@ -111,6 +111,23 @@ class EmitenteController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             
+            // Log do erro para debug
+            \Log::error('Erro ao cadastrar emitente', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'codigo_ibge_cidade' => $dados['cidade']['codigo_ibge'] ?? null,
+            ]);
+            
+            // Verifica se o erro é relacionado a cidade/IBGE
+            $errorMessage = $e->getMessage();
+            if (stripos($errorMessage, 'cidade') !== false || stripos($errorMessage, 'IBGE') !== false) {
+                return $this->error([
+                    'error_message' => $errorMessage,
+                    'codigo_ibge_cidade' => $dados['cidade']['codigo_ibge'] ?? null,
+                    'sugestao' => 'Verifique se o código IBGE da cidade está correto. O sistema cria automaticamente a cidade se ela não existir.',
+                ], Response::HTTP_BAD_REQUEST);
+            }
+            
             return $this->error([
                 'error_message' => 'Erro ao cadastrar emitente',
                 'error_details' => config('app.debug') ? $e->getMessage() : 'Erro interno do servidor',

@@ -20,6 +20,14 @@ class NFeService extends DocumentosFiscaisAbstract
     public function buildNFeXml(Request $request)
     {
         try {
+            // Verificar se o objeto NFe foi inicializado corretamente
+            if (!$this->nfe) {
+                throw new Exception('Objeto NFe não foi inicializado. Verifique o certificado digital e as configurações do emitente.', 9004);
+            }
+
+            if (!$this->emitente) {
+                throw new Exception('Emitente não foi configurado corretamente.', 9005);
+            }
 
             $csts_icms_st = new Collection(['10', '60']);
 
