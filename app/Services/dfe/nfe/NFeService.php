@@ -742,6 +742,8 @@ class NFeService extends DocumentosFiscaisAbstract
                             'sucesso' => false,
                             'codigo' => $cStatNfe,
                             'mensagem' => $xMotivoNfe,
+                            'xml_enviado' => property_exists($evento, 'xml_enviado') ? $evento->xml_enviado : base64_decode($documento->conteudo_xml_assinado),
+                            'xml_enviado_base64' => property_exists($evento, 'xml_enviado_base64') ? $evento->xml_enviado_base64 : $documento->conteudo_xml_assinado,
                             'data' => []
                         ]);
                     }
