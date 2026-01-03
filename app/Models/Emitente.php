@@ -4,11 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use SoftDeletes;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Emitente extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'cidade_id',
@@ -20,6 +20,7 @@ class Emitente extends Model
         'codigo_csc',
         'inscricao_estadual',
         'inscricao_municipal',
+        'conteudo_logotipo',
         'conteudo_certificado',
         'caminho_certificado',
         'senha_certificado',
