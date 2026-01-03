@@ -663,7 +663,25 @@ class NFeService extends DocumentosFiscaisAbstract
 
             // Se o evento não for uma instância de Evento, significa que houve erro
             if (get_class($evento) !== Evento::class) {
-                return response()->json($evento);
+                // Preparar retorno padronizado com XML
+                $retorno = [
+                    'sucesso' => false,
+                    'codigo' => $evento->codigo ?? 9998,
+                    'mensagem' => $evento->mensagem_retorno ?? 'Erro ao processar lote',
+                    'data' => [],
+                    'xml_enviado' => base64_decode($documento->conteudo_xml_assinado),
+                    'xml_enviado_base64' => $documento->conteudo_xml_assinado
+                ];
+                
+                // Adicionar outros campos do evento se existirem
+                if (isset($evento->nome_evento)) {
+                    $retorno['nome_evento'] = $evento->nome_evento;
+                }
+                if (isset($evento->data_hora_evento)) {
+                    $retorno['data_hora_evento'] = $evento->data_hora_evento;
+                }
+                
+                return response()->json($retorno);
             }
 
             // Verificar se o evento tem recibo antes de consultar status
@@ -740,7 +758,9 @@ class NFeService extends DocumentosFiscaisAbstract
                     'sucesso' => false,
                     'codigo' => $evento->codigo ?? 9998,
                     'mensagem' => $evento->mensagem_retorno ?? 'Lote não foi aceito pela SEFAZ. Não há recibo para consultar.',
-                    'data' => []
+                    'data' => [],
+                    'xml_enviado' => base64_decode($documento->conteudo_xml_assinado),
+                    'xml_enviado_base64' => $documento->conteudo_xml_assinado
                 ]);
             }
 

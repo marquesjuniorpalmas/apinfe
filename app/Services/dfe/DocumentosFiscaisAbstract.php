@@ -197,11 +197,16 @@ abstract class DocumentosFiscaisAbstract implements DocumentosFiscaisInterface
                 // Lote rejeitado ou com erro
                 $evento = json_decode(json_encode($eventoData));
                 
+                // Adicionar XML do documento para debug
+                $evento->xml_enviado = base64_decode($documento->conteudo_xml_assinado);
+                $evento->xml_enviado_base64 = $documento->conteudo_xml_assinado;
+                
                 // Log do erro para debug
                 \Log::warning('Lote rejeitado pela SEFAZ', [
                     'codigo' => $stdClass->cStat,
                     'mensagem' => $stdClass->xMotivo ?? 'Sem mensagem',
                     'documento_id' => $documento->id,
+                    'chave' => $documento->chave ?? null,
                 ]);
             }
             
