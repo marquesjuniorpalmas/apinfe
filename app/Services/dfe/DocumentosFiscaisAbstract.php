@@ -206,45 +206,85 @@ abstract class DocumentosFiscaisAbstract implements DocumentosFiscaisInterface
 
     public function getStatus(Evento $evento)
     {
-        $protocolo = $this->tools->sefazConsultaRecibo($evento->recibo);
-
-//        if(!is_null($protocolo) || empty($protocolo)) {
-//            return $protocolo;
-//        }
-
-
-        $st = new Standardize();
-        $stdClass = $st->toStd($protocolo);
-
-        if($stdClass->protNFe->infProt->cStat != 100) {
+        // Verificar se o evento tem recibo
+        if (empty($evento->recibo)) {
+            \Log::warning('Tentativa de consultar status sem recibo', [
+                'evento_id' => $evento->id,
+                'codigo' => $evento->codigo,
+                'mensagem' => $evento->mensagem_retorno,
+            ]);
+            
             return [
                 'sucesso' => false,
-                'codigo' => $stdClass->protNFe->infProt->cStat,
-                'mensagem' => $stdClass->protNFe->infProt->xMotivo,
+                'codigo' => $evento->codigo ?? 9998,
+                'mensagem' => $evento->mensagem_retorno ?? 'Lote não foi aceito pela SEFAZ. Não há recibo para consultar.',
                 'data' => []
             ];
         }
 
-        if($stdClass->protNFe->infProt->cStat == 100){
+        try {
+            $protocolo = $this->tools->sefazConsultaRecibo($evento->recibo);
 
+            if (empty($protocolo)) {
+                throw new Exception('Resposta vazia da SEFAZ ao consultar recibo', 9008);
+            }
+
+            $st = new Standardize();
+            $stdClass = $st->toStd($protocolo);
+
+            // Verificar se a estrutura da resposta está correta
+            if (!isset($stdClass->protNFe) || !isset($stdClass->protNFe->infProt)) {
+                throw new Exception('Resposta inválida da SEFAZ ao consultar recibo', 9009);
+            }
+
+            $cStat = $stdClass->protNFe->infProt->cStat;
+            $xMotivo = $stdClass->protNFe->infProt->xMotivo ?? 'Sem mensagem';
+
+            // Se o status não for 100 (autorizado), retornar erro
+            if ($cStat != 100) {
+                return [
+                    'sucesso' => false,
+                    'codigo' => $cStat,
+                    'mensagem' => $xMotivo,
+                    'data' => []
+                ];
+            }
+
+            // Status 100 - Documento autorizado
             DB::beginTransaction();
 
             try {
                 $documento = Documento::find($evento->documento_id);
 
+                if (!$documento) {
+                    throw new Exception('Documento não encontrado', 9010);
+                }
+
                 $documento->update([
                     'status' => 'autorizado',
-                    'protocolo' => $stdClass->protNFe->infProt->nProt,
-                    ''
+                    'protocolo' => $stdClass->protNFe->infProt->nProt ?? null,
                 ]);
 
                 $documento = Documento::find($documento->id);
 
+                // Preparar data_hora_evento com tratamento de erro
+                $dataHoraEvento = now();
+                if (isset($stdClass->protNFe->infProt->dhRecbto)) {
+                    try {
+                        $dataHoraEvento = Carbon::createFromFormat('c', $stdClass->protNFe->infProt->dhRecbto);
+                    } catch (\Exception $dateException) {
+                        \Log::warning('Erro ao parsear data do protocolo', [
+                            'dhRecbto' => $stdClass->protNFe->infProt->dhRecbto ?? null,
+                            'erro' => $dateException->getMessage()
+                        ]);
+                    }
+                }
+
                 $documento->eventos()->create([
                     'nome_evento' => 'consulta_status_documento',
-                    'codigo' => $stdClass->protNFe->infProt->cStat,
-                    'mensagem_retorno' => $stdClass->protNFe->infProt->xMotivo,
-                    'data_hora_evento' => Carbon::createFromFormat('c', $stdClass->protNFe->infProt->dhRecbto)->format('Y-m-d H:m:s'),
+                    'codigo' => $cStat,
+                    'mensagem_retorno' => $xMotivo,
+                    'data_hora_evento' => $dataHoraEvento,
                     'recibo' => null,
                 ]);
 
@@ -257,20 +297,37 @@ abstract class DocumentosFiscaisAbstract implements DocumentosFiscaisInterface
                     'data' => $protocolo
                 ];
 
-
             } catch (Exception $e) {
                 DB::rollBack();
+                \Log::error('Erro ao atualizar documento após autorização', [
+                    'message' => $e->getMessage(),
+                    'evento_id' => $evento->id,
+                    'documento_id' => $evento->documento_id ?? null,
+                ]);
+                
                 return [
                     'sucesso' => false,
-                    'codigo' => $e->getCode(),
+                    'codigo' => $e->getCode() ?: 9011,
                     'mensagem' => 'Falha ao consultar o status do documento',
                     'correcao' => 'Entre em contato com o suporte',
                     'data' => null
                 ];
             }
+
+        } catch (Exception $e) {
+            \Log::error('Erro ao consultar status do recibo na SEFAZ', [
+                'message' => $e->getMessage(),
+                'evento_id' => $evento->id,
+                'recibo' => $evento->recibo,
+            ]);
+            
+            return [
+                'sucesso' => false,
+                'codigo' => $e->getCode() ?: 9012,
+                'mensagem' => 'Erro ao consultar status na SEFAZ: ' . $e->getMessage(),
+                'data' => []
+            ];
         }
-
-
     }
 
 

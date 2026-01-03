@@ -620,8 +620,25 @@ class NFeService extends DocumentosFiscaisAbstract
 
             $evento = $nfeService->sendBatch($documento);
 
+            // Se o evento não for uma instância de Evento, significa que houve erro
             if (get_class($evento) !== Evento::class) {
                 return response()->json($evento);
+            }
+
+            // Verificar se o evento tem recibo antes de consultar status
+            if (empty($evento->recibo)) {
+                \Log::warning('Evento criado sem recibo - lote provavelmente rejeitado', [
+                    'evento_codigo' => $evento->codigo ?? null,
+                    'evento_mensagem' => $evento->mensagem_retorno ?? null,
+                    'documento_id' => $documento->id,
+                ]);
+                
+                return response()->json([
+                    'sucesso' => false,
+                    'codigo' => $evento->codigo ?? 9998,
+                    'mensagem' => $evento->mensagem_retorno ?? 'Lote não foi aceito pela SEFAZ. Não há recibo para consultar.',
+                    'data' => []
+                ]);
             }
 
             $result = $nfeService->getStatus($evento);
