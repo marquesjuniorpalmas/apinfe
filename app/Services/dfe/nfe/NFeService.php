@@ -626,7 +626,29 @@ class NFeService extends DocumentosFiscaisAbstract
             }
 
             // Verificar se o evento tem recibo antes de consultar status
+            // Código 104 = Lote processado (não precisa consultar recibo, já foi processado)
             if (empty($evento->recibo)) {
+                // Se o código for 104, o lote já foi processado - não precisa consultar recibo
+                if ($evento->codigo == 104) {
+                    \Log::info('Lote já processado (código 104) - consultando status do documento diretamente', [
+                        'documento_id' => $documento->id,
+                    ]);
+                    
+                    // Para código 104, tentar consultar o status do documento pela chave
+                    // ou retornar que o lote foi processado
+                    return response()->json([
+                        'sucesso' => false,
+                        'codigo' => $evento->codigo,
+                        'mensagem' => $evento->mensagem_retorno . ' - O lote já foi processado. Consulte o status do documento pela chave.',
+                        'data' => [
+                            'documento_id' => $documento->id,
+                            'chave' => $documento->chave ?? null,
+                            'sugestao' => 'Use o endpoint de consulta de DFe pela chave para verificar o status do documento'
+                        ]
+                    ]);
+                }
+                
+                // Para outros códigos sem recibo, é um erro
                 \Log::warning('Evento criado sem recibo - lote provavelmente rejeitado', [
                     'evento_codigo' => $evento->codigo ?? null,
                     'evento_mensagem' => $evento->mensagem_retorno ?? null,
