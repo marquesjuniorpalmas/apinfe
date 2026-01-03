@@ -195,10 +195,16 @@ abstract class DocumentosFiscaisAbstract implements DocumentosFiscaisInterface
                 $evento = $documento->eventos()->create($eventoData);
             } else {
                 // Lote rejeitado ou com erro
-                $evento = json_decode(json_encode($eventoData));
+                // Adicionar XML do documento antes de converter para objeto
+                $xmlDecodificado = base64_decode($documento->conteudo_xml_assinado);
+                $eventoData['xml_enviado'] = $xmlDecodificado;
+                $eventoData['xml_enviado_base64'] = $documento->conteudo_xml_assinado;
                 
-                // Adicionar XML do documento para debug
-                $evento->xml_enviado = base64_decode($documento->conteudo_xml_assinado);
+                // Converter para objeto mantendo todas as propriedades
+                $evento = (object) $eventoData;
+                
+                // Garantir que as propriedades XML estão acessíveis
+                $evento->xml_enviado = $xmlDecodificado;
                 $evento->xml_enviado_base64 = $documento->conteudo_xml_assinado;
                 
                 // Log do erro para debug
@@ -207,6 +213,8 @@ abstract class DocumentosFiscaisAbstract implements DocumentosFiscaisInterface
                     'mensagem' => $stdClass->xMotivo ?? 'Sem mensagem',
                     'documento_id' => $documento->id,
                     'chave' => $documento->chave ?? null,
+                    'tem_xml_enviado' => isset($evento->xml_enviado),
+                    'tamanho_xml' => strlen($xmlDecodificado),
                 ]);
             }
             

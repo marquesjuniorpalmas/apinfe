@@ -662,22 +662,22 @@ class NFeService extends DocumentosFiscaisAbstract
             $evento = $nfeService->sendBatch($documento);
 
             // Se o evento não for uma instância de Evento, significa que houve erro
-            if (get_class($evento) !== Evento::class) {
-                // Preparar retorno padronizado com XML
+            if (!($evento instanceof Evento)) {
+                // Preparar retorno padronizado com XML - sempre incluir XML
                 $retorno = [
                     'sucesso' => false,
-                    'codigo' => $evento->codigo ?? 9998,
-                    'mensagem' => $evento->mensagem_retorno ?? 'Erro ao processar lote',
+                    'codigo' => property_exists($evento, 'codigo') ? $evento->codigo : 9998,
+                    'mensagem' => property_exists($evento, 'mensagem_retorno') ? $evento->mensagem_retorno : 'Erro ao processar lote',
                     'data' => [],
-                    'xml_enviado' => base64_decode($documento->conteudo_xml_assinado),
-                    'xml_enviado_base64' => $documento->conteudo_xml_assinado
+                    'xml_enviado' => property_exists($evento, 'xml_enviado') ? $evento->xml_enviado : base64_decode($documento->conteudo_xml_assinado),
+                    'xml_enviado_base64' => property_exists($evento, 'xml_enviado_base64') ? $evento->xml_enviado_base64 : $documento->conteudo_xml_assinado,
                 ];
                 
                 // Adicionar outros campos do evento se existirem
-                if (isset($evento->nome_evento)) {
+                if (property_exists($evento, 'nome_evento')) {
                     $retorno['nome_evento'] = $evento->nome_evento;
                 }
-                if (isset($evento->data_hora_evento)) {
+                if (property_exists($evento, 'data_hora_evento')) {
                     $retorno['data_hora_evento'] = $evento->data_hora_evento;
                 }
                 
