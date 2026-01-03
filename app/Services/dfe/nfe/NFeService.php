@@ -626,26 +626,66 @@ class NFeService extends DocumentosFiscaisAbstract
             }
 
             // Verificar se o evento tem recibo antes de consultar status
-            // Código 104 = Lote processado (não precisa consultar recibo, já foi processado)
+            // Código 104 = Lote processado (resposta síncrona quando há apenas 1 NFe)
+            // Neste caso, a resposta já contém protNFe->infProt com o status da NFe
             if (empty($evento->recibo)) {
-                // Se o código for 104, o lote já foi processado - não precisa consultar recibo
-                if ($evento->codigo == 104) {
-                    \Log::info('Lote já processado (código 104) - consultando status do documento diretamente', [
+                // Se o código for 104 e tiver resposta completa (protNFe), processar diretamente
+                if ($evento->codigo == 104 && isset($evento->protNFe) && isset($evento->protNFe->infProt)) {
+                    \Log::info('Lote processado com resposta síncrona (código 104) - processando status diretamente', [
                         'documento_id' => $documento->id,
+                        'cStat_nfe' => $evento->protNFe->infProt->cStat ?? null,
                     ]);
                     
-                    // Para código 104, tentar consultar o status do documento pela chave
-                    // ou retornar que o lote foi processado
-                    return response()->json([
-                        'sucesso' => false,
-                        'codigo' => $evento->codigo,
-                        'mensagem' => $evento->mensagem_retorno . ' - O lote já foi processado. Consulte o status do documento pela chave.',
-                        'data' => [
-                            'documento_id' => $documento->id,
-                            'chave' => $documento->chave ?? null,
-                            'sugestao' => 'Use o endpoint de consulta de DFe pela chave para verificar o status do documento'
-                        ]
-                    ]);
+                    // Processar o status da NFe diretamente da resposta
+                    $infProt = $evento->protNFe->infProt;
+                    $cStatNfe = $infProt->cStat ?? null;
+                    $xMotivoNfe = $infProt->xMotivo ?? 'Sem mensagem';
+                    
+                    // Se a NFe foi autorizada (cStat 100)
+                    if ($cStatNfe == 100) {
+                        // Usar o XML da resposta armazenado no evento
+                        $protocoloXml = $evento->resposta_xml ?? null;
+                        
+                        if (!$protocoloXml) {
+                            return response()->json([
+                                'sucesso' => false,
+                                'codigo' => 9997,
+                                'mensagem' => 'XML da resposta não encontrado para processamento',
+                                'data' => []
+                            ]);
+                        }
+                        
+                        $result = $nfeService->addProtocolIntoXml($documento, $protocoloXml);
+                        
+                        if (!$result['sucesso']) {
+                            return $result;
+                        }
+                        
+                        $documentoAutorizado = $result['data'];
+                        $documentoDanfe = $nfeService->buildDanfe($documentoAutorizado);
+                        $eventos = $documentoDanfe->eventos()->select()->get();
+                        
+                        return [
+                            'sucesso' => true,
+                            'mensagem' => 'Autorizado o uso do NF-e',
+                            'chave' => $documentoAutorizado->chave,
+                            'protocolo' => $documentoAutorizado->protocolo,
+                            'status' => $documentoAutorizado->status,
+                            'numero' => $documentoAutorizado->numero,
+                            'serie' => $documentoAutorizado->serie,
+                            'xml' => $documentoAutorizado->conteudo_xml_autorizado,
+                            'pdf' => $documentoDanfe->conteudo_pdf,
+                            'historico' => json_decode(json_encode($eventos))
+                        ];
+                    } else {
+                        // NFe rejeitada
+                        return response()->json([
+                            'sucesso' => false,
+                            'codigo' => $cStatNfe,
+                            'mensagem' => $xMotivoNfe,
+                            'data' => []
+                        ]);
+                    }
                 }
                 
                 // Para outros códigos sem recibo, é um erro

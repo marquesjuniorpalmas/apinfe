@@ -151,12 +151,10 @@ abstract class DocumentosFiscaisAbstract implements DocumentosFiscaisInterface
         try {
             $idBatch = str_pad('100', 15, '0', STR_PAD_LEFT);
 
-            $response = $this->tools->sefazEnviaLote([base64_decode($documento->conteudo_xml_assinado)], $idBatch);
+            $response = $this->tools->sefazEnviaLote([base64_decode($documento->conteudo_xml_assinado)], $idBatch, 1);
 
             $std = new Standardize();
             $stdClass = $std->toStd($response);
-
-            print_r($stdClass);
 
             // Verificar se a resposta foi bem-sucedida
             if (!isset($stdClass->cStat)) {
@@ -172,9 +170,24 @@ abstract class DocumentosFiscaisAbstract implements DocumentosFiscaisInterface
                 'recibo' => null, // Será preenchido se existir
             ];
 
-            // Verificar se há recibo (infRec só existe em respostas de sucesso)
+            // Verificar se há recibo (infRec só existe em respostas de sucesso com código 103 ou 105)
             if (isset($stdClass->infRec) && isset($stdClass->infRec->nRec)) {
                 $eventoData['recibo'] = $stdClass->infRec->nRec;
+            }
+
+            // Código 104 = Lote processado (resposta síncrona quando há apenas 1 NFe no lote)
+            // Neste caso, a resposta já contém protNFe->infProt com o status da NFe
+            if ($stdClass->cStat == 104 && isset($stdClass->protNFe) && isset($stdClass->protNFe->infProt)) {
+                // Armazenar o XML da resposta para processamento posterior
+                $eventoData['resposta_xml'] = $response; // XML completo da resposta
+                $evento = $documento->eventos()->create($eventoData);
+                
+                // Adicionar propriedades ao objeto para processamento
+                $evento->tem_resposta_completa = true;
+                $evento->protNFe = $stdClass->protNFe;
+                $evento->resposta_xml = $response;
+                
+                return $evento;
             }
 
             // Verificar se o lote foi aceito (cStat 103, 104 ou 105)
